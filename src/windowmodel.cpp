@@ -48,6 +48,8 @@ QVariant WindowModel::data(const QModelIndex &index, int role) const
         return win->isUrgent;
     case IconPathRole:
         return win->iconPath;
+    case LayoutRole:
+        return QVariant::fromValue(win->layout);
     default:
         return QVariant();
     }
@@ -65,6 +67,7 @@ QHash<int, QByteArray> WindowModel::roleNames() const
     roles[IsFloatingRole] = "isFloating";
     roles[IsUrgentRole] = "isUrgent";
     roles[IconPathRole] = "iconPath";
+    roles[LayoutRole] = "layout";
     return roles;
 }
 
@@ -202,9 +205,37 @@ void WindowModel::handleWindowUrgencyChanged(quint64 id, bool urgent)
 
 void WindowModel::handleWindowLayoutsChanged(const QJsonArray &changes)
 {
-    // Window layout changes don't affect the properties we're tracking
-    // This is mostly for position/size which we're not exposing yet
-    Q_UNUSED(changes);
+    // Process each layout change
+    // Each change is an array: [windowId, layoutObject]
+    for (const QJsonValue &value : changes) {
+        if (!value.isArray()) continue;
+
+        QJsonArray changeArray = value.toArray();
+        if (changeArray.size() != 2) continue;
+
+        quint64 windowId = changeArray[0].toInteger();
+        QJsonObject layoutObj = changeArray[1].toObject();
+
+        int idx = findWindowIndex(windowId);
+        if (idx == -1) {
+            qWarning() << "Window not found for layout change:" << windowId;
+            continue;
+        }
+
+        Window *win = m_windows[idx];
+
+        // Update layout using the parseLayout helper
+        parseLayout(win, layoutObj);
+
+        // Notify that layout property changed
+        QModelIndex modelIdx = index(idx);
+        emit dataChanged(modelIdx, modelIdx, {LayoutRole});
+
+        // If this is the focused window, emit focusedWindowChanged
+        if (win->isFocused) {
+            emit focusedWindowChanged();
+        }
+    }
 }
 
 Window* WindowModel::parseWindow(const QJsonObject &obj)
@@ -225,7 +256,58 @@ Window* WindowModel::parseWindow(const QJsonObject &obj)
     win->isUrgent = obj["is_urgent"].toBool();
     win->iconPath = IconLookup::lookup(win->appId);
 
+    // Parse layout information if present
+    if (obj.contains("layout")) {
+        parseLayout(win, obj["layout"].toObject());
+    }
+
     return win;
+}
+
+void WindowModel::parseLayout(Window *win, const QJsonObject &layoutObj)
+{
+    // Parse pos_in_scrolling_layout
+    if (layoutObj.contains("pos_in_scrolling_layout")) {
+        QJsonArray pos = layoutObj["pos_in_scrolling_layout"].toArray();
+        if (pos.size() == 2) {
+            win->layout.posInScrollingLayout = QPointF(pos[0].toDouble(), pos[1].toDouble());
+        }
+    }
+
+    // Parse tile_size
+    if (layoutObj.contains("tile_size")) {
+        QJsonArray size = layoutObj["tile_size"].toArray();
+        if (size.size() == 2) {
+            win->layout.tileSize = QSizeF(size[0].toDouble(), size[1].toDouble());
+        }
+    }
+
+    // Parse window_size
+    if (layoutObj.contains("window_size")) {
+        QJsonArray size = layoutObj["window_size"].toArray();
+        if (size.size() == 2) {
+            win->layout.windowSize = QSizeF(size[0].toDouble(), size[1].toDouble());
+        }
+    }
+
+    // Parse tile_pos_in_workspace_view (can be null)
+    QJsonValue tilePosValue = layoutObj["tile_pos_in_workspace_view"];
+    if (!tilePosValue.isNull()) {
+        QJsonArray pos = tilePosValue.toArray();
+        if (pos.size() == 2) {
+            win->layout.tilePosInWorkspaceView = QPointF(pos[0].toDouble(), pos[1].toDouble());
+        }
+    } else {
+        win->layout.tilePosInWorkspaceView = QPointF(-1, -1);  // Invalid point for null
+    }
+
+    // Parse window_offset_in_tile
+    if (layoutObj.contains("window_offset_in_tile")) {
+        QJsonArray offset = layoutObj["window_offset_in_tile"].toArray();
+        if (offset.size() == 2) {
+            win->layout.windowOffsetInTile = QPointF(offset[0].toDouble(), offset[1].toDouble());
+        }
+    }
 }
 
 int WindowModel::findWindowIndex(quint64 id) const
