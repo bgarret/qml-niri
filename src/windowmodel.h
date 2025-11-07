@@ -4,6 +4,30 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QQmlEngine>
+#include <QPointF>
+#include <QSizeF>
+
+class Layout
+{
+    Q_GADGET
+    Q_PROPERTY(QPointF posInScrollingLayout MEMBER posInScrollingLayout)
+    Q_PROPERTY(QSizeF tileSize MEMBER tileSize)
+    Q_PROPERTY(QSizeF windowSize MEMBER windowSize)
+    Q_PROPERTY(QPointF tilePosInWorkspaceView MEMBER tilePosInWorkspaceView)
+    Q_PROPERTY(QPointF windowOffsetInTile MEMBER windowOffsetInTile)
+
+public:
+    QPointF posInScrollingLayout;
+    QSizeF tileSize;
+    QSizeF windowSize;
+    QPointF tilePosInWorkspaceView;
+    QPointF windowOffsetInTile;
+
+    Layout()
+        : tilePosInWorkspaceView(-1, -1) {}
+};
+
+Q_DECLARE_METATYPE(Layout)
 
 class Window : public QObject
 {
@@ -18,6 +42,7 @@ class Window : public QObject
     Q_PROPERTY(bool isFloating MEMBER isFloating CONSTANT)
     Q_PROPERTY(bool isUrgent MEMBER isUrgent CONSTANT)
     Q_PROPERTY(QString iconPath MEMBER iconPath CONSTANT)
+    Q_PROPERTY(Layout layout MEMBER layout CONSTANT)
 
 public:
     explicit Window(QObject *parent = nullptr)
@@ -33,6 +58,7 @@ public:
     bool isFloating;
     bool isUrgent;
     QString iconPath;
+    Layout layout;
 };
 
 class WindowModel : public QAbstractListModel
@@ -52,7 +78,8 @@ public:
         IsFocusedRole,
         IsFloatingRole,
         IsUrgentRole,
-        IconPathRole
+        IconPathRole,
+        LayoutRole
     };
 
     explicit WindowModel(QObject *parent = nullptr);
@@ -80,6 +107,7 @@ private:
     void handleWindowLayoutsChanged(const QJsonArray &changes);
 
     Window* parseWindow(const QJsonObject &obj);
+    void parseLayout(Window *win, const QJsonObject &layoutObj);
     int findWindowIndex(quint64 id) const;
     void updateFocusedWindow();
 
