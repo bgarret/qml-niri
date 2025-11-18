@@ -123,6 +123,20 @@ Available workspace properties:
 - `isFocused`: Currently focused workspace
 - `isUrgent`: Has windows requesting attention
 - `activeWindowId`: ID of the active window
+- `maxCount`: Maximum number of workspaces to expose (default: unlimited, shows all workspaces)
+
+#### Limiting workspace count
+
+You can limit the number of workspaces exposed by the model using the `maxCount` property. Only the first `maxCount` workspaces (after sorting) will be available:
+
+```qml
+Component.onCompleted: {
+    niri.workspaces.maxCount = 11
+}
+```
+
+This is useful for widget layouts that should only show a fixed number of workspaces.
+
 
 ### Working with windows
 
@@ -329,6 +343,9 @@ ShellRoot {
             }
         }
 
+        // Limit to first 10 workspaces
+        Component.onCompleted: niri.workspaces.maxCount = 10
+
         Row {
             spacing: 10
             anchors {
@@ -344,7 +361,6 @@ ShellRoot {
                     model: niri.workspaces
 
                     Rectangle {
-                        visible: index < 11
                         width: 30
                         height: 20
                         color: model.isFocused ? "#106DAA" :

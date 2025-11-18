@@ -12,12 +12,12 @@ int WorkspaceModel::rowCount(const QModelIndex &parent) const
 {
     if (parent.isValid())
         return 0;
-    return m_workspaces.count();
+    return qMin(m_workspaces.count(), m_maxCount);
 }
 
 QVariant WorkspaceModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() >= m_workspaces.count())
+    if (!index.isValid() || index.row() >= rowCount())
         return QVariant();
 
     const Workspace &ws = m_workspaces.at(index.row());
@@ -56,6 +56,34 @@ QHash<int, QByteArray> WorkspaceModel::roleNames() const
     roles[IsUrgentRole] = "isUrgent";
     roles[ActiveWindowIdRole] = "activeWindowId";
     return roles;
+}
+
+int WorkspaceModel::maxCount() const
+{
+    return m_maxCount;
+}
+
+void WorkspaceModel::setMaxCount(int maxCount)
+{
+    if (m_maxCount == maxCount || maxCount < 0)
+        return;
+
+    int oldVisible = qMin(m_workspaces.count(), m_maxCount);
+    int newVisible = qMin(m_workspaces.count(), maxCount);
+
+    if (newVisible < oldVisible) {
+        beginRemoveRows(QModelIndex(), newVisible, oldVisible - 1);
+        m_maxCount = maxCount;
+        endRemoveRows();
+    } else if (newVisible > oldVisible) {
+        beginInsertRows(QModelIndex(), oldVisible, newVisible - 1);
+        m_maxCount = maxCount;
+        endInsertRows();
+    } else {
+        m_maxCount = maxCount; // No visible change
+    }
+
+    emit maxCountChanged();
 }
 
 void WorkspaceModel::handleEvent(const QJsonObject &event)
@@ -125,8 +153,11 @@ void WorkspaceModel::handleWorkspaceActivated(quint64 id, bool focused)
             bool becameActive = (i == idx);
             if (m_workspaces[i].isActive != becameActive) {
                 m_workspaces[i].isActive = becameActive;
-                QModelIndex modelIdx = index(i);
-                emit dataChanged(modelIdx, modelIdx, {IsActiveRole});
+                // Only emit signal if row is visible
+                if (i < rowCount()) {
+                    QModelIndex modelIdx = index(i);
+                    emit dataChanged(modelIdx, modelIdx, {IsActiveRole});
+                }
             }
         }
 
@@ -135,8 +166,11 @@ void WorkspaceModel::handleWorkspaceActivated(quint64 id, bool focused)
             bool becameFocused = (i == idx);
             if (m_workspaces[i].isFocused != becameFocused) {
                 m_workspaces[i].isFocused = becameFocused;
-                QModelIndex modelIdx = index(i);
-                emit dataChanged(modelIdx, modelIdx, {IsFocusedRole});
+                // Only emit signal if row is visible
+                if (i < rowCount()) {
+                    QModelIndex modelIdx = index(i);
+                    emit dataChanged(modelIdx, modelIdx, {IsFocusedRole});
+                }
             }
         }
     }
@@ -152,8 +186,11 @@ void WorkspaceModel::handleWorkspaceUrgencyChanged(quint64 id, bool urgent)
 
     if (m_workspaces[idx].isUrgent != urgent) {
         m_workspaces[idx].isUrgent = urgent;
-        QModelIndex modelIdx = index(idx);
-        emit dataChanged(modelIdx, modelIdx, {IsUrgentRole});
+        // Only emit signal if row is visible
+        if (idx < rowCount()) {
+            QModelIndex modelIdx = index(idx);
+            emit dataChanged(modelIdx, modelIdx, {IsUrgentRole});
+        }
     }
 }
 
@@ -168,8 +205,11 @@ void WorkspaceModel::handleWorkspaceActiveWindowChanged(quint64 workspaceId, con
     quint64 newActiveWindowId = activeWindowId.isNull() ? 0 : activeWindowId.toInteger();
     if (m_workspaces[idx].activeWindowId != newActiveWindowId) {
         m_workspaces[idx].activeWindowId = newActiveWindowId;
-        QModelIndex modelIdx = index(idx);
-        emit dataChanged(modelIdx, modelIdx, {ActiveWindowIdRole});
+        // Only emit signal if row is visible
+        if (idx < rowCount()) {
+            QModelIndex modelIdx = index(idx);
+            emit dataChanged(modelIdx, modelIdx, {ActiveWindowIdRole});
+        }
     }
 }
 
